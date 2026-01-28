@@ -1,76 +1,126 @@
-import time
-import threading
-from pynput import keyboard, mouse
 import tkinter as tk
+from tkinter import OptionMenu
+from pynput import mouse, keyboard
+from threading import Thread
+import os
+from pynput.mouse import Controller as MouseController
+from pynput.keyboard import Controller as KeyboardController
+import time
+from Quartz.CoreGraphics import CGEventCreateKeyboardEvent, CGEventPost, kCGHIDEventTap
+
 
 running = False
-interval = 1
+KSA = False
 
+ssKeybind = 'e'
+
+options = [1, 2, 3, 4, 5, 6]
+
+roblox_number_keycodes = {
+    '1': 18,
+    '2': 19,
+    '3': 20,
+    '4': 21,
+    '5': 23,
+    '6': 22,
+    '7': 26,
+    '8': 28,
+    '9': 25,
+    '0': 29
+}
 
 mainScreen = tk.Tk()
-
-mainScreen.title("Dark Auto Clicker V1.0")
-mainScreen.geometry("450x200")
+mainScreen.title("FBG Level Macro V1.0 (By Dark)")
+mainScreen.geometry("300x150")
 mainScreen.resizable(False, False)
 
-timeFrame = tk.Frame(mainScreen)
-timeFrame.pack(pady=30)
+moveCount = tk.IntVar(value = options[0])
 
-hourTextBox = tk.Entry(timeFrame, width=5)
-hourTextBox.pack(side="left")
-hourTextBox.insert(0, "0")
-hourTextLabel = tk.Label(timeFrame, text="Hour(s)")
-hourTextLabel.pack(side="left")
+ssFrame = tk.Frame(mainScreen)
+ssFrame.pack(pady=10)
+ssButton = tk.Button(ssFrame, text=f"Start/Stop ({ssKeybind})", width=15, height=2, command=lambda: inputEvent(ssKeybind))
+ssButton.pack(padx=15, side="left")
+ssRebind = tk.Button(ssFrame, text="Rebind", height=2, width=5, command=lambda: rebind_key(ssKeybind, ssButton, f"Start/Stop"))
+ssRebind.pack(side="left")
 
-minuteTextBox = tk.Entry(timeFrame, width=5)
-minuteTextBox.pack(side="left")
-minuteTextBox.insert(0, "0")
-minuteTextLabel = tk.Label(timeFrame, text="Minute(s)")
-minuteTextLabel.pack(side="left")
+moveCountFrame = tk.Frame(mainScreen)
+moveCountFrame.pack(pady=10)
+moveCountLabel = tk.Label(moveCountFrame, text="Number of Moves:")
+moveCountLabel.pack(side="left")
+moveCountOM = tk.OptionMenu(moveCountFrame, moveCount, *options)
+moveCountOM.pack(side="left")
 
-secondTextBox = tk.Entry(timeFrame, width=5)
-secondTextBox.pack(side="left")
-secondTextBox.insert(0, "1")
-secondTextLabel = tk.Label(timeFrame, text="Second(s)")
-secondTextLabel.pack(side="left")
+statusLabel = tk.Label(mainScreen, text="Status: Stopped", font=("Arial", 14, "bold"))
+statusLabel.pack(pady=10)
+    
+def rebind_key(targetVar, uiVar, uiText):
+    global KSA
+    global ssKeybind
+    prompt = tk.Toplevel(mainScreen)
+    prompt.title("Rebind Key")
+    prompt.geometry("300x80")
+    prompt.transient(mainScreen)
+    tk.Label(prompt, text=f"Press new key for keybind...").pack(pady=10)
+    prompt.focus_force()
+    KSA = True
 
-startLabel = tk.Button(mainScreen, text="Start/Stop (Tab)", width=15, height=2)
-startLabel.pack(pady=10)
+    def on_key(event):
+        nonlocal targetVar
+        nonlocal prompt
+        newBind = event.keysym
+        targetVar = newBind
+        uiVar.config(text=f"{uiText} ({newBind})")
+        prompt.destroy()
+    KSA = False
+    prompt.bind("<Key>", on_key)
 
-def calculateInterval():
-    hours = int(hourTextBox.get())
-    minutes = int(minuteTextBox.get())
-    seconds = int(secondTextBox.get())
-    totalSeconds = hours * 3600 + minutes * 60 + seconds
-
-    print(totalSeconds)
-    return totalSeconds
-
-def on_press(key): 
+def inputEvent(key):
     global running
-    global interval
-    if key == keyboard.Key.tab:
-        running = not running
-        if running:
-            interval = calculateInterval()
-            threading.Thread(target=startClick).start()
+    if KSA:
+        return
+    try:
+        key = key.char
+    except (TypeError, AttributeError):
+        return
+    if key == ssKeybind:
+        if not running:
+            running = True
+            statusLabel.config(text="Status: Running")
+            thread = Thread(target=startMacro, daemon=True)
+            thread.start()
+        else:
+            running = False
+            statusLabel.config(text="Status: Stopped")
 
-def startClick():
-    global running
-    global interval
-    mouseController = mouse.Controller()
+KC = KeyboardController()
+MC = MouseController()
+
+def press_roblox_number(key_char):
+    """Send a raw hardware key press using Quartz."""
+    key_code = roblox_number_keycodes.get(key_char)
+    if key_code is None:
+        print(f"No keycode for {key_char}")
+        return
+
+    event_down = CGEventCreateKeyboardEvent(None, key_code, True)
+    CGEventPost(kCGHIDEventTap, event_down)
+
+    event_up = CGEventCreateKeyboardEvent(None, key_code, False)
+    CGEventPost(kCGHIDEventTap, event_up)
+
+
+def startMacro():
+    global moveCount
+    currentNumber = 1
     while running:
-        mouseController.click(mouse.Button.left, 1)
-        print("Clicked")
-        time.sleep(interval)
+            press_roblox_number(str(currentNumber))
+            time.sleep(.5)
+            MC.click(mouse.Button.left, 1)
+            currentNumber += 1
+            if currentNumber > moveCount.get():
+                currentNumber = 1
 
-def run_listener():
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start()
-
+listener = keyboard.Listener(on_press=inputEvent)
+listener.start()
 
 mainScreen.mainloop()
-mainScreen.after(100, run_listener)
-
-if __name__ == "__main__":
-    mainScreen.mainloop()
